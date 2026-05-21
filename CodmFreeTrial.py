@@ -1,0 +1,761 @@
+from flask import Flask, request, jsonify, render_template_string, redirect, session
+import psycopg2
+import os
+import time
+import random
+import string
+
+app = Flask(__name__)
+
+app.secret_key = "slider_super_secure_local_pass_key_12213"
+
+# ==========================================
+# DATABASE URL (RENDER ENVIRONMENT)
+# ==========================================
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+# ==========================================
+# ADMIN PASSWORD
+# ==========================================
+ADMIN_PASSWORD = "slider123"
+
+# ==========================================
+# DATABASE
+# ==========================================
+def get_db_connection():
+    return psycopg2.connect(DATABASE_URL)
+
+def init_db():
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS free_keys_table (
+            license_key TEXT PRIMARY KEY,
+            hwid TEXT,
+            expiry_timestamp BIGINT,
+            game TEXT DEFAULT 'CODM'
+        )
+    """)
+
+    conn.commit()
+    conn.close()
+
+# ==========================================
+# USER LANDING TEMPLATE
+# ==========================================
+FREE_LANDING_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Kaze Lider Mods - Registration</title>
+
+<style>
+
+body{
+    background:#ffffff;
+    color:#000000;
+    font-family:sans-serif;
+    padding:20px;
+    margin:0;
+}
+
+.vip-link{
+    font-size:20px;
+    font-weight:bold;
+    color:#0000ff;
+    text-decoration:underline;
+    display:inline-block;
+    margin-bottom:25px;
+}
+
+.info-text{
+    font-size:16px;
+    margin-bottom:20px;
+}
+
+.pricelist-title{
+    font-weight:bold;
+    margin-top:15px;
+    margin-bottom:10px;
+    font-size:18px;
+}
+
+.price-item{
+    margin:6px 0;
+    font-size:16px;
+}
+
+.payment-methods{
+    margin-top:15px;
+    font-size:16px;
+}
+
+.divider{
+    margin:20px 0;
+    color:#5f6368;
+}
+
+.trial-container{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-top:35px;
+}
+
+.tap-here{
+    background:#00a2e8;
+    color:white;
+    font-size:10px;
+    font-weight:bold;
+    padding:5px 7px;
+    border-radius:3px;
+    text-transform:uppercase;
+    animation:bounceHorizontal 0.6s infinite alternate;
+}
+
+@keyframes bounceHorizontal{
+    0%{ transform:translateX(0); }
+    100%{ transform:translateX(6px); }
+}
+
+.trial-link-btn{
+    background:none;
+    border:none;
+    color:#008000;
+    font-size:19px;
+    font-weight:bold;
+    text-decoration:underline;
+    cursor:pointer;
+}
+
+.temporary-text{
+    color:#ff0000;
+    font-size:19px;
+    font-weight:bold;
+}
+
+</style>
+</head>
+
+<body>
+
+<a href="https://t.me/KAZELIDERMODS/380" target="_blank" class="vip-link">
+Purchase VIP, No ads, More features
+</a>
+
+<div class="info-text">
+
+<div class="pricelist-title">
+Official pricelist:
+</div>
+
+<div class="price-item">₱150 → 3 Days</div>
+<div class="price-item">₱300 → 7 Days</div>
+<div class="price-item">₱500 → 15 Days</div>
+<div class="price-item">₱730 → 30 Days</div>
+<div class="price-item">₱2,000 → Permanent</div>
+
+<div class="payment-methods">
+Gcash, Paypal, Binance Wise 🙂
+</div>
+
+</div>
+
+<div class="divider">
+=======================================
+</div>
+
+<form action="/free/process" method="POST">
+
+<div class="trial-container">
+
+<div class="tap-here">
+TAP HERE
+</div>
+
+<button type="submit" class="trial-link-btn">
+Free trial link 1.
+</button>
+
+<span class="temporary-text">
+(Temporary)
+</span>
+
+</div>
+
+</form>
+
+</body>
+</html>
+"""
+
+# ==========================================
+# GENERATED KEY TEMPLATE
+# ==========================================
+FREE_GENERATED_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Slider Free</title>
+
+<style>
+
+body{
+    background:#000;
+    color:#fff;
+    font-family:sans-serif;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    align-items:center;
+    height:100vh;
+    margin:0;
+    padding:20px;
+}
+
+.alert-text{
+    color:#d92424;
+    font-size:24px;
+    margin-bottom:45px;
+    text-align:center;
+}
+
+.gen-btn{
+    background:#4caf50;
+    color:#fff;
+    width:100%;
+    max-width:340px;
+    padding:16px;
+    font-size:20px;
+    border:none;
+    border-radius:4px;
+    cursor:pointer;
+}
+
+.key-display{
+    display:none;
+    background:#fff;
+    color:#000;
+    width:100%;
+    max-width:340px;
+    padding:14px;
+    font-size:16px;
+    text-align:center;
+    border-radius:4px;
+    margin-bottom:15px;
+    word-break:break-all;
+}
+
+.copy-btn{
+    display:none;
+    background:#f39c12;
+    color:#fff;
+    width:100%;
+    max-width:340px;
+    padding:14px;
+    font-size:18px;
+    border:none;
+    border-radius:4px;
+    cursor:pointer;
+}
+
+.footer-info{
+    margin-top:50px;
+    text-align:center;
+    font-size:15px;
+    color:#b3b3b3;
+}
+
+.validity-days{
+    margin-bottom:25px;
+    color:#fff;
+}
+
+.tg-channel-link{
+    display:block;
+    color:#f39c12;
+    text-decoration:none;
+    margin-top:6px;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="alert-text">
+Always use latest version.
+</div>
+
+<button class="gen-btn" id="initGenBtn" onclick="showKeyScreen()">
+Generate Key!
+</button>
+
+<div class="key-display" id="keyText">
+{{ key }}
+</div>
+
+<button class="copy-btn" id="realCopyBtn" onclick="copyToClipboard()">
+Copy key
+</button>
+
+<div class="footer-info">
+
+<div class="validity-days">
+Validity: 12 Hour's
+</div>
+
+Subscribe to my channel
+
+<a href="https://t.me/KAZELIDERMODS" target="_blank" class="tg-channel-link">
+HTTPS://T.ME/KAZELIDERMODS
+</a>
+
+</div>
+
+<script>
+
+function showKeyScreen(){
+
+    document.getElementById("initGenBtn").style.display = "none";
+    document.getElementById("keyText").style.display = "block";
+    document.getElementById("realCopyBtn").style.display = "block";
+
+}
+
+function copyToClipboard(){
+
+    var key = document.getElementById("keyText").innerText;
+
+    navigator.clipboard.writeText(key);
+
+    alert("Copied Free Key:\\n\\n" + key);
+
+}
+
+</script>
+
+</body>
+</html>
+"""
+
+# ==========================================
+# ADMIN LOGIN TEMPLATE
+# ==========================================
+ADMIN_LOGIN_TEMPLATE = """
+<!DOCTYPE html>
+<html>
+<head>
+
+<title>Admin Login</title>
+
+<style>
+
+body{
+    background:#111;
+    color:white;
+    font-family:sans-serif;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    height:100vh;
+}
+
+.box{
+    background:#1e1e1e;
+    padding:30px;
+    border-radius:10px;
+    width:300px;
+}
+
+input{
+    width:100%;
+    padding:12px;
+    margin-top:10px;
+    margin-bottom:15px;
+    border:none;
+    border-radius:5px;
+}
+
+button{
+    width:100%;
+    padding:12px;
+    background:#4caf50;
+    border:none;
+    color:white;
+    border-radius:5px;
+    cursor:pointer;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="box">
+
+<h2>Admin Login</h2>
+
+<form method="POST">
+
+<input type="password" name="password" placeholder="Enter Admin Password">
+
+<button type="submit">
+Login
+</button>
+
+</form>
+
+</div>
+
+</body>
+</html>
+"""
+
+# ==========================================
+# ADMIN PANEL TEMPLATE
+# ==========================================
+ADMIN_PANEL_TEMPLATE = """
+<!DOCTYPE html>
+<html>
+<head>
+
+<title>Admin Panel</title>
+
+<style>
+
+body{
+    background:#0f0f0f;
+    color:white;
+    font-family:sans-serif;
+    padding:20px;
+}
+
+table{
+    width:100%;
+    border-collapse:collapse;
+    margin-top:20px;
+}
+
+th, td{
+    border:1px solid #333;
+    padding:12px;
+    text-align:center;
+}
+
+th{
+    background:#1f1f1f;
+}
+
+tr:nth-child(even){
+    background:#181818;
+}
+
+.delete-btn{
+    background:red;
+    color:white;
+    padding:8px 12px;
+    text-decoration:none;
+    border-radius:5px;
+}
+
+.logout-btn{
+    background:#444;
+    color:white;
+    padding:10px 15px;
+    text-decoration:none;
+    border-radius:5px;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<h1>Generated Keys</h1>
+
+<a href="/admin/logout" class="logout-btn">
+Logout
+</a>
+
+<table>
+
+<tr>
+<th>License Key</th>
+<th>HWID</th>
+<th>Expiry</th>
+<th>Game</th>
+<th>Action</th>
+</tr>
+
+{% for key in keys %}
+
+<tr>
+
+<td>{{ key[0] }}</td>
+<td>{{ key[1] }}</td>
+<td>{{ key[2] }}</td>
+<td>{{ key[3] }}</td>
+
+<td>
+
+<a class="delete-btn" href="/admin/delete/{{ key[0] }}">
+Delete
+</a>
+
+</td>
+
+</tr>
+
+{% endfor %}
+
+</table>
+
+</body>
+</html>
+"""
+
+# ==========================================
+# USER ROUTES
+# ==========================================
+@app.route('/free')
+def free_landing():
+    return render_template_string(FREE_LANDING_TEMPLATE)
+
+@app.route('/free/process', methods=['POST'])
+def free_process_route():
+
+    session['authorized_click'] = True
+    session['click_time'] = int(time.time())
+
+    return redirect("https://sfl.gl/XSwjZ0w")
+
+@app.route('/free/generate/direct')
+def free_generate_direct():
+
+    now = int(time.time())
+
+    if 'authorized_click' not in session:
+        return '<script>alert("Bypass Detected!");window.location.href="/free";</script>'
+
+    if now - session.get('click_time', 0) > 900:
+
+        session.pop('authorized_click', None)
+
+        return '<script>alert("Session Expired!");window.location.href="/free";</script>'
+
+    session.pop('authorized_click', None)
+
+    pool_characters = string.ascii_letters + string.digits
+
+    random_suffix = ''.join(random.choices(pool_characters, k=15))
+
+    new_free_key = f"Slider_12h{random_suffix}"
+
+    expiry_time = now + (12 * 3600)
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "INSERT INTO free_keys_table (license_key, hwid, expiry_timestamp, game) VALUES (%s, '', %s, 'CODM')",
+        (new_free_key, expiry_time)
+    )
+
+    conn.commit()
+    conn.close()
+
+    return render_template_string(FREE_GENERATED_TEMPLATE, key=new_free_key)
+
+# ==========================================
+# VERIFY API FOR LUA
+# ==========================================
+@app.route('/verify', methods=['POST'])
+def verify_key():
+
+    try:
+
+        key = request.form.get('key', '').strip()
+        device_id = request.form.get('device_id', '').strip()
+        game = request.form.get('game', '').strip()
+
+        if not key:
+
+            return jsonify({
+                "status": 1,
+                "msg": "Invalid Key"
+            })
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute(
+            "SELECT hwid, expiry_timestamp, game FROM free_keys_table WHERE license_key = %s",
+            (key,)
+        )
+
+        result = cursor.fetchone()
+
+        if not result:
+
+            conn.close()
+
+            return jsonify({
+                "status": 1,
+                "msg": "Invalid Key"
+            })
+
+        saved_hwid = result[0]
+        expiry_timestamp = int(result[1])
+        db_game = result[2]
+
+        now = int(time.time())
+
+        # EXPIRED
+        if now > expiry_timestamp:
+
+            conn.close()
+
+            return jsonify({
+                "status": 3,
+                "msg": "Key Expired"
+            })
+
+        # WRONG GAME
+        if game != db_game:
+
+            conn.close()
+
+            return jsonify({
+                "status": 1,
+                "msg": "Wrong Game"
+            })
+
+        # FIRST LOGIN SAVE DEVICE
+        if saved_hwid == "":
+
+            cursor.execute(
+                "UPDATE free_keys_table SET hwid = %s WHERE license_key = %s",
+                (device_id, key)
+            )
+
+            conn.commit()
+
+        # DIFFERENT DEVICE
+        elif saved_hwid != device_id:
+
+            conn.close()
+
+            return jsonify({
+                "status": 2,
+                "msg": "Key Used On Another Device"
+            })
+
+        conn.close()
+
+        return jsonify({
+            "status": 0,
+            "msg": "Login Success",
+            "expiry": expiry_timestamp
+        })
+
+    except Exception as e:
+
+        return jsonify({
+            "status": 1,
+            "msg": str(e)
+        })
+
+# ==========================================
+# ADMIN LOGIN
+# ==========================================
+@app.route('/admin/login', methods=['GET', 'POST'])
+def admin_login():
+
+    if request.method == 'POST':
+
+        password = request.form.get('password')
+
+        if password == ADMIN_PASSWORD:
+
+            session['admin_logged_in'] = True
+
+            return redirect('/admin/panel')
+
+        else:
+
+            return '<script>alert("Wrong Password");window.location.href="/admin/login";</script>'
+
+    return render_template_string(ADMIN_LOGIN_TEMPLATE)
+
+# ==========================================
+# ADMIN PANEL
+# ==========================================
+@app.route('/admin/panel')
+def admin_panel():
+
+    if not session.get('admin_logged_in'):
+        return redirect('/admin/login')
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM free_keys_table ORDER BY expiry_timestamp DESC")
+
+    keys = cursor.fetchall()
+
+    conn.close()
+
+    return render_template_string(ADMIN_PANEL_TEMPLATE, keys=keys)
+
+# ==========================================
+# DELETE KEY
+# ==========================================
+@app.route('/admin/delete/<key>')
+def delete_key(key):
+
+    if not session.get('admin_logged_in'):
+        return redirect('/admin/login')
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "DELETE FROM free_keys_table WHERE license_key = %s",
+        (key,)
+    )
+
+    conn.commit()
+    conn.close()
+
+    return redirect('/admin/panel')
+
+# ==========================================
+# ADMIN LOGOUT
+# ==========================================
+@app.route('/admin/logout')
+def admin_logout():
+
+    session.pop('admin_logged_in', None)
+
+    return redirect('/admin/login')
+
+# ==========================================
+# START SERVER
+# ==========================================
+init_db()
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
