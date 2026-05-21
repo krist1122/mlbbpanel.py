@@ -592,7 +592,7 @@ def free_return():
     if result[0]:
         return '<script>alert("Already Used");window.location="/free";</script>'
 
-    return redirect(f"/free/generate/direct?token={token}")
+    return redirect(f"/free/return?token={token}")
 
 
 # ==========================================
