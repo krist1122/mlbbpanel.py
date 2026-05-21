@@ -652,7 +652,44 @@ def verify_key():
 
     except Exception as e:
         return jsonify({"status": 1, "msg": str(e)})
+        
+        # ==========================================
+# ADMIN LOGIN
+# ==========================================
+@app.route('/admin/login', methods=['GET', 'POST'])
+def admin_login():
 
+    if request.method == "POST":
+        password = request.form.get("password")
+
+        if password == ADMIN_PASSWORD:
+            session["admin"] = True
+            return redirect("/admin/panel")
+
+        return "<script>alert('Wrong Password');window.location='/admin/login';</script>"
+
+    return render_template_string(ADMIN_LOGIN_TEMPLATE)
+
+@app.route('/admin/panel')
+def admin_panel():
+
+    if not session.get("admin"):
+        return redirect("/admin/login")
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM free_keys_table")
+    keys = cursor.fetchall()
+
+    conn.close()
+
+    return render_template_string(ADMIN_PANEL_TEMPLATE, keys=keys)
+    
+    @app.route('/admin/logout')
+def admin_logout():
+    session.clear()
+    return redirect("/admin/login")
 # ==========================================
 # INIT DB ON START
 # ==========================================
