@@ -547,6 +547,10 @@ Delete
 # ==========================================
 # USER ROUTES
 # ==========================================
+@app.route('/free')
+def free_landing():
+    return render_template_string(FREE_LANDING_TEMPLATE)
+
 @app.route('/free/process', methods=['POST'])
 def free_process_route():
 
