@@ -553,22 +553,20 @@ def free_landing():
 
 @app.route('/free/process', methods=['POST'])
 def free_process_route():
-
     token = str(uuid.uuid4())
 
     conn = get_db_connection()
     cursor = conn.cursor()
-
     cursor.execute(
         "INSERT INTO free_tokens (token, used, created_at) VALUES (%s, %s, %s)",
         (token, False, int(time.time()))
     )
-
     conn.commit()
     conn.close()
 
-    # IMPORTANT: ipasa token sa link
+    # DITO: Ipapasa natin ang token sa URL ng SafelinkU
     return redirect(f"https://sfl.gl/0hpxBx?token={token}")
+
 
 
 # =========================
