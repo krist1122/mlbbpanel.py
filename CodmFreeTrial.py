@@ -4,6 +4,7 @@ import os
 import time
 import random
 import string
+import uuid
 
 app = Flask(__name__)
 app.secret_key = "slider_super_secure_local_pass_key_12213"
@@ -45,6 +46,14 @@ def init_db():
             hwid TEXT,
             expiry_timestamp BIGINT,
             game TEXT DEFAULT 'CODM'
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS free_tokens (
+            token TEXT PRIMARY KEY,
+            used BOOLEAN DEFAULT FALSE,
+            created_at BIGINT
         )
     """)
 
@@ -545,10 +554,36 @@ def free_landing():
 @app.route('/free/process', methods=['POST'])
 def free_process_route():
 
-    session['authorized_click'] = True
-    session['click_time'] = int(time.time())
+    token = str(uuid.uuid4())
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "INSERT INTO free_tokens (token, used, created_at) VALUES (%s, %s, %s)",
+        (token, False, int(time.time()))
+    )
+
+    conn.commit()
+    conn.close()
 
     return redirect("https://sfl.gl/vzr4cJ0B")
+    
+    @app.route('/free/return')
+def free_return():
+
+    token = request.args.get("token")
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT used FROM free_tokens WHERE token=%s", (token,))
+    result = cursor.fetchone()
+
+    if not result or result[0] == True:
+        return '<script>alert("Invalid / Used Token");window.location="/free";</script>'
+
+    return redirect(f"/free/generate/direct?token={token}")
 
 
 # ==========================================
@@ -557,40 +592,37 @@ def free_process_route():
 @app.route('/free/generate/direct')
 def free_generate_direct():
 
-    try:
-        now = int(time.time())
+    token = request.args.get("token")
 
-        if 'authorized_click' not in session:
-            return '<script>alert("Bypass Detected!");window.location.href="/free";</script>'
+    conn = get_db_connection()
+    cursor = conn.cursor()
 
-        if now - session.get('click_time', 0) > 900:
-            session.pop('authorized_click', None)
-            return '<script>alert("Session Expired!");window.location.href="/free";</script>'
+    # 🔒 check token
+    cursor.execute("SELECT used FROM free_tokens WHERE token=%s", (token,))
+    result = cursor.fetchone()
 
-        session.pop('authorized_click', None)
+    if not result or result[0] == True:
+        return '<script>alert("Bypass Detected");window.location="/free";</script>'
 
-        pool = string.ascii_letters + string.digits
-        random_suffix = ''.join(random.choices(pool, k=15))
+    # 🔥 MARK AS USED IMMEDIATELY (CRITICAL)
+    cursor.execute("UPDATE free_tokens SET used=True WHERE token=%s", (token,))
+    conn.commit()
 
-        new_free_key = f"Slider_12h{random_suffix}"
-        expiry_time = now + (12 * 3600)
+    # generate key
+    now = int(time.time())
 
-        conn = get_db_connection()
-        cursor = conn.cursor()
+    new_free_key = "Slider_" + ''.join(random.choices(string.ascii_letters + string.digits, k=15))
+    expiry_time = now + (12 * 3600)
 
-        cursor.execute(
-            "INSERT INTO free_keys_table (license_key, hwid, expiry_timestamp, game) VALUES (%s, %s, %s, %s)",
-            (new_free_key, '', expiry_time, 'CODM')
-        )
+    cursor.execute(
+        "INSERT INTO free_keys_table (license_key, hwid, expiry_timestamp, game) VALUES (%s, %s, %s, %s)",
+        (new_free_key, '', expiry_time, 'CODM')
+    )
 
-        conn.commit()
-        conn.close()
+    conn.commit()
+    conn.close()
 
-        return render_template_string(FREE_GENERATED_TEMPLATE, key=new_free_key)
-
-    except Exception as e:
-        print("GEN KEY ERROR:", str(e))
-        return f"<h3>ERROR: {str(e)}</h3>"
+    return render_template_string(FREE_GENERATED_TEMPLATE, key=new_free_key)
 
 # ==========================================
 # VERIFY API
