@@ -172,11 +172,11 @@ Purchase VIP, No ads, More features
 Official pricelist:
 </div>
 
-<div class="price-item">₱150 → 3 Days</div>
-<div class="price-item">₱300 → 7 Days</div>
-<div class="price-item">₱500 → 15 Days</div>
-<div class="price-item">₱730 → 30 Days</div>
-<div class="price-item">₱2,000 → Permanent</div>
+<div class="price-item">₱150 || $2.57 → 3 Days</div>
+<div class="price-item">₱300 || $5.15 → 7 Days</div>
+<div class="price-item">₱500 || $8.58 → 15 Days</div>
+<div class="price-item">₱730 || $12.87 → 30 Days</div>
+<div class="price-item">₱2,000 || $35+ → Permanent ~</div>
 
 <div class="payment-methods">
 Gcash, Paypal, Binance Wise 🙂
