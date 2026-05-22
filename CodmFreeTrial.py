@@ -589,6 +589,964 @@ UNLOCK FREE KEY
 <th>Expiry</th>
 <th>Game</th>
 <th>Action</th>
+<th>Edit Time</th>
+</tr>
+
+{% for key in keys %}
+
+<tr>
+
+<td>{{ key[0] }}</td>
+<td>{{ key[1] }}</td>
+<td>{{ key[2] }}</td>
+<td>{{ key[3] }}</td>
+
+<td>
+    <form action="/admin/edit_time/{{ key[0] }}" method="POST" style="display:flex; gap:5px; justify-content:center;">
+        <input type="number" name="hours" placeholder="H" style="width:50px;">
+        <input type="number" name="minutes" placeholder="M" style="width:50px;">
+        <button type="submit" style="
+            background:blue;
+            color:white;
+            border:none;
+            padding:5px 10px;
+            border-radius:4px;
+        ">
+            Edit
+        </button>
+    </form>
+</td>
+
+<td>
+
+<a class="delete-btn" href="/admin/delete/{{ key[0] }}">
+Delete
+</a>
+
+</td>
+
+</tr>
+
+{% endfor %}
+
+</table>
+
+</body>
+</html>
+"""
+
+# ==========================================
+# USER ROUTES
+# ==========================================
+@app.route('/free')
+def free_landing():
+
+    return render_template_string(
+        FREE_LANDING_TEMPLATE,
+        free_enabled=FREE_KEY_ENABLED
+    )
+
+@app.route('/free/process', methods=['POST'])
+def free_process_route():
+
+    global FREE_KEY_ENABLED
+
+    if not FREE_KEY_ENABLED:
+        return '<script>alert("Free Key Locked");window.location="/free";</script>'
+
+    token = str(uuid.uuid4())
+
+    session["free_token"] = token
+    session["passed_safelink"] = False
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "INSERT INTO free_tokens (token, used, created_at) VALUES (%s,%s,%s)",
+        (token, False, int(time.time()))
+    )
+
+    conn.commit()
+    conn.close()
+
+    return redirect("https://gplinks.co/FiTnB")
+
+
+
+# =========================
+# RETURN ROUTE (OUTSIDE FUNCTION!)
+# =========================
+@app.route('/free/return')
+def free_return():
+
+    global FREE_KEY_ENABLED
+
+    if not FREE_KEY_ENABLED:
+        return '<script>alert("Free Key Locked");window.location="/free";</script>'
+
+    token = session.get("free_token")
+
+    if not token:
+        return '<script>alert("Missing Token");window.location="/free";</script>'
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "SELECT used FROM free_tokens WHERE token=%s",
+        (token,)
+    )
+
+    result = cursor.fetchone()
+
+    conn.close()
+
+    if not result:
+        return '<script>alert("Invalid Token");window.location="/free";</script>'
+
+    if result[0]:
+        return '<script>alert("Already Used");window.location="/free";</script>'
+
+    # IMPORTANT
+    session["passed_safelink"] = True
+
+    return redirect("/free/generate/direct")
+
+
+# ==========================================
+# FREE GENERATE KEY (FIXED)
+# ==========================================
+@app.route('/free/generate/direct')
+def free_generate_direct():
+
+    global FREE_KEY_ENABLED
+
+    if not FREE_KEY_ENABLED:
+        return '<script>alert("Free Key Locked");window.location="/free";</script>'
+
+    # ANTI BYPASS
+    if not session.get("passed_safelink"):
+        return '<script>alert("Complete Safelink First");window.location="/free";</script>'
+
+    token = session.get("free_token")
+
+    if not token:
+        return '<script>alert("Session Expired");window.location="/free";</script>'
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "SELECT used FROM free_tokens WHERE token=%s",
+        (token,)
+    )
+
+    result = cursor.fetchone()
+
+    if not result:
+        conn.close()
+        return '<script>alert("Invalid Token");window.location="/free";</script>'
+
+    if result[0]:
+        conn.close()
+        return '<script>alert("Already Used");window.location="/free";</script>'
+
+    # MARK USED
+    cursor.execute(
+        "UPDATE free_tokens SET used=TRUE WHERE token=%s",
+        (token,)
+    )
+
+    # GENERATE KEY
+    now = int(time.time())
+
+    new_key = "Slider_12h" + ''.join(
+        random.choices(
+            string.ascii_letters + string.digits,
+            k=15
+        )
+    )
+
+    expiry = now + (4 * 3600)
+
+    cursor.execute(
+        "INSERT INTO free_keys_table (license_key, hwid, expiry_timestamp, game) VALUES (%s,%s,%s,%s)",
+        (new_key, '', expiry, 'CODM')
+    )
+
+    conn.commit()
+    conn.close()
+
+    # CLEAR SESSION
+    session.pop("passed_safelink", None)
+    session.pop("free_token", None)
+
+    return render_template_string(
+        FREE_GENERATED_TEMPLATE,
+        key=new_key
+    )
+
+# ==========================================
+# VERIFY API
+# ==========================================
+@app.route('/verify', methods=['POST'])
+def verify_key():
+    try:
+        key = request.form.get('key', '').strip()
+        device_id = request.form.get('device_id', '').strip()
+        game = request.form.get('game', '').strip()
+
+        if not key:
+            return jsonify({"status": 1, "msg": "Invalid Key"})
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute(
+            "SELECT hwid, expiry_timestamp, game FROM free_keys_table WHERE license_key = %s",
+            (key,)
+        )
+
+        result = cursor.fetchone()
+
+        if not result:
+            conn.close()
+            return jsonify({"status": 1, "msg": "Invalid Key"})
+
+        saved_hwid, expiry_timestamp, db_game = result
+        now = int(time.time())
+
+        if now > expiry_timestamp:
+            conn.close()
+            return jsonify({"status": 3, "msg": "Key Expired"})
+
+        if game != db_game:
+            conn.close()
+            return jsonify({"status": 1, "msg": "Wrong Game"})
+
+        if saved_hwid == "":
+            cursor.execute(
+                "UPDATE free_keys_table SET hwid = %s WHERE license_key = %s",
+                (device_id, key)
+            )
+            conn.commit()
+
+        elif saved_hwid != device_id:
+            conn.close()
+            return jsonify({"status": 2, "msg": "Key Used On Another Device"})
+
+        conn.close()
+
+        return jsonify({
+            "status": 0,
+            "msg": "Login Success",
+            "expiry": expiry_timestamp
+        })
+
+    except Exception as e:
+        return jsonify({"status": 1, "msg": str(e)})
+        
+        # ==========================================
+# ADMIN LOGIN
+# ==========================================
+@app.route('/admin/login', methods=['GET', 'POST'])
+def admin_login():
+
+    if request.method == "POST":
+        password = request.form.get("password")
+
+        if password == ADMIN_PASSWORD:
+            session["admin"] = True
+            return redirect("/admin/panel")
+
+        return "<script>alert('Wrong Password');window.location='/admin/login';</script>"
+
+    return render_template_string(ADMIN_LOGIN_TEMPLATE)
+
+
+# ==========================================
+# ADMIN PANEL
+# ==========================================
+@app.route('/admin/panel')
+def admin_panel():
+
+    if not session.get("admin"):
+        return redirect("/admin/login")
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM free_keys_table")
+    raw_keys = cursor.fetchall()
+
+    conn.close()
+
+    keys = []
+
+    now = int(time.time())
+
+    for key in raw_keys:
+
+        remaining = key[2] - now
+
+        if remaining <= 0:
+            expiry_text = "EXPIRED"
+
+        else:
+
+            days = remaining // 86400
+            hours = (remaining % 86400) // 3600
+            minutes = (remaining % 3600) // 60
+
+            expiry_text = f"{days}D {hours}H {minutes}M"
+
+        keys.append((
+            key[0],   # license_key
+            key[1],   # hwid
+            expiry_text,
+            key[3]    # game
+        ))
+
+    return render_template_string(
+        ADMIN_PANEL_TEMPLATE,
+        keys=keys
+    )
+    
+# ==========================================
+# LOCK FREE KEY
+# ==========================================
+@app.route('/admin/free/lock')
+def lock_free_key():
+
+    global FREE_KEY_ENABLED
+
+    if not session.get("admin"):
+        return redirect("/admin/login")
+
+    FREE_KEY_ENABLED = False
+
+    return redirect("/admin/panel")
+
+
+# ==========================================
+# UNLOCK FREE KEY
+# ==========================================
+@app.route('/admin/free/unlock')
+def unlock_free_key():
+
+    global FREE_KEY_ENABLED
+
+    if not session.get("admin"):
+        return redirect("/admin/login")
+
+    FREE_KEY_ENABLED = True
+
+    return redirect("/admin/panel")
+# ==========================================
+# DELETE KEY
+# ==========================================
+@app.route('/admin/delete/<key>')
+def delete_key(key):
+
+    if not session.get("admin"):
+        return redirect("/admin/login")
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("DELETE FROM free_keys_table WHERE license_key=%s", (key,))
+    conn.commit()
+    conn.close()
+
+    return redirect("/admin/panel")
+    
+    
+    @app.route('/admin/edit_time/<key>', methods=['POST'])
+def edit_time(key):
+
+    if not session.get("admin"):
+        return redirect("/admin/login")
+
+    hours = int(request.form.get("hours", 0))
+    minutes = int(request.form.get("minutes", 0))
+
+    add_seconds = (hours * 3600) + (minutes * 60)
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "SELECT expiry_timestamp FROM free_keys_table WHERE license_key=%s",
+        (key,)
+    )
+
+    result = cursor.fetchone()
+
+    if not result:
+        conn.close()
+        return redirect("/admin/panel")
+
+    current_expiry = result[0]
+    now = int(time.time())
+
+    base = now if current_expiry < now else current_expiry
+    new_expiry = base + add_seconds
+
+    cursor.execute(
+        "UPDATE free_keys_table SET expiry_timestamp=%s WHERE license_key=%s",
+        (new_expiry, key)
+    )
+
+    conn.commit()
+    conn.close()
+
+    return redirect("/admin/panel")
+
+
+# ==========================================
+# LOGOUT
+# ==========================================
+@app.route('/admin/logout')
+def admin_logout():
+    session.clear()
+    return redirect("/admin/login")
+
+# ==========================================
+# INIT DB ON START
+# ==========================================
+init_db()
+
+# ==========================================
+# RUN SERVER
+# ==========================================
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
+# ==========================================
+FREE_LANDING_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Kaze Lider Mods - Registration</title>
+
+<style>
+
+body{
+    background:#ffffff;
+    color:#000000;
+    font-family:sans-serif;
+    padding:20px;
+    margin:0;
+}
+
+.vip-link{
+    font-size:20px;
+    font-weight:bold;
+    color:#0000ff;
+    text-decoration:underline;
+    display:inline-block;
+    margin-bottom:25px;
+}
+
+.info-text{
+    font-size:16px;
+    margin-bottom:20px;
+}
+
+.pricelist-title{
+    font-weight:bold;
+    margin-top:15px;
+    margin-bottom:10px;
+    font-size:18px;
+}
+
+.price-item{
+    margin:6px 0;
+    font-size:16px;
+}
+
+.payment-methods{
+    margin-top:15px;
+    font-size:16px;
+}
+
+.divider{
+    margin:20px 0;
+    color:#5f6368;
+}
+
+.trial-container{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-top:35px;
+}
+
+.tap-here{
+    background:#00a2e8;
+    color:white;
+    font-size:10px;
+    font-weight:bold;
+    padding:5px 7px;
+    border-radius:3px;
+    text-transform:uppercase;
+    animation:bounceHorizontal 0.6s infinite alternate;
+}
+
+@keyframes bounceHorizontal{
+    0%{ transform:translateX(0); }
+    100%{ transform:translateX(6px); }
+}
+
+.trial-link-btn{
+    background:none;
+    border:none;
+    color:#008000;
+    font-size:19px;
+    font-weight:bold;
+    text-decoration:underline;
+    cursor:pointer;
+}
+
+.temporary-text{
+    color:#ff0000;
+    font-size:19px;
+    font-weight:bold;
+}
+
+</style>
+</head>
+
+<body>
+
+<a href="https://t.me/KAZELIDERMODS/380" target="_blank" class="vip-link">
+Purchase VIP, No ads, More features
+</a>
+
+<div class="info-text">
+
+<div class="pricelist-title">
+Official pricelist || Codm Free Key Only!
+</div>
+
+<div class="price-item">₱150 || $2.57 → 3 Days</div>
+<div class="price-item">₱300 || $5.15 → 7 Days</div>
+<div class="price-item">₱500 || $8.58 → 15 Days</div>
+<div class="price-item">₱730 || $12.87 → 30 Days</div>
+<div class="price-item">₱2,000 || $35+ → Permanent ~</div>
+
+<div class="payment-methods">
+Gcash, Paypal, Binance Wise 🙂
+</div>
+
+<div class="payment-methods">
+DM:
+<a 
+href="http://t.me/phia_maganda"
+target="_blank"
+style="color:#0088cc;text-decoration:none;font-weight:bold;"
+>
+@phia_maganda
+</a>
+</div>
+
+</div>
+
+<div class="divider">
+=======================================
+</div>
+
+{% if free_enabled %}
+
+<form action="/free/process" method="POST">
+
+<div class="trial-container">
+
+<div class="tap-here">
+TAP HERE
+</div>
+
+<button type="submit" class="trial-link-btn">
+Free trial link 1.
+</button>
+
+<span class="temporary-text">
+(Temporary)
+</span>
+
+</div>
+
+</form>
+
+{% else %}
+
+<div style="
+margin-top:35px;
+text-align:center;
+">
+
+<div style="
+color:red;
+font-size:28px;
+font-weight:bold;
+margin-bottom:20px;
+">
+WALA PANG FREE KEY DITO KEY-NG INAMO
+</div>
+
+<div style="
+font-size:18px;
+line-height:1.7;
+">
+Free trial is currently unavailable.<br><br>
+
+Please wait for free access to reopen<br>
+OR avail VIP access 🙂
+</div>
+
+</div>
+
+{% endif %}
+
+</body>
+</html>
+"""
+
+# ==========================================
+# GENERATED KEY TEMPLATE
+# ==========================================
+FREE_GENERATED_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Slider Free</title>
+
+<style>
+
+body{
+    background:#000;
+    color:#fff;
+    font-family:sans-serif;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    align-items:center;
+    height:100vh;
+    margin:0;
+    padding:20px;
+}
+
+.alert-text{
+    color:#d92424;
+    font-size:24px;
+    margin-bottom:45px;
+    text-align:center;
+}
+
+.gen-btn{
+    background:#4caf50;
+    color:#fff;
+    width:100%;
+    max-width:340px;
+    padding:16px;
+    font-size:20px;
+    border:none;
+    border-radius:4px;
+    cursor:pointer;
+}
+
+.key-display{
+    display:none;
+    background:#fff;
+    color:#000;
+    width:100%;
+    max-width:340px;
+    padding:14px;
+    font-size:16px;
+    text-align:center;
+    border-radius:4px;
+    margin-bottom:15px;
+    word-break:break-all;
+}
+
+.copy-btn{
+    display:none;
+    background:#f39c12;
+    color:#fff;
+    width:100%;
+    max-width:340px;
+    padding:14px;
+    font-size:18px;
+    border:none;
+    border-radius:4px;
+    cursor:pointer;
+}
+
+.footer-info{
+    margin-top:50px;
+    text-align:center;
+    font-size:15px;
+    color:#b3b3b3;
+}
+
+.validity-days{
+    margin-bottom:25px;
+    color:#fff;
+}
+
+.tg-channel-link{
+    display:block;
+    color:#f39c12;
+    text-decoration:none;
+    margin-top:6px;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="alert-text">
+Always use latest version.
+</div>
+
+<button class="gen-btn" id="initGenBtn" onclick="showKeyScreen()">
+Generate Key!
+</button>
+
+<div class="key-display" id="keyText">
+{{ key }}
+</div>
+
+<button class="copy-btn" id="realCopyBtn" onclick="copyToClipboard()">
+Copy key
+</button>
+
+<div class="footer-info">
+
+<div class="validity-days">
+Validity: 12 Hour's
+</div>
+
+Subscribe to my channel to get latest updates
+
+<a href="https://t.me/KAZELIDERMODS" target="_blank" class="tg-channel-link">
+HTTPS://T.ME/KAZELIDERMODS
+</a>
+
+</div>
+
+<script>
+
+function showKeyScreen(){
+
+    document.getElementById("initGenBtn").style.display = "none";
+    document.getElementById("keyText").style.display = "block";
+    document.getElementById("realCopyBtn").style.display = "block";
+
+}
+
+function copyToClipboard(){
+
+    var key = document.getElementById("keyText").innerText;
+
+    navigator.clipboard.writeText(key);
+
+    alert("Copied Free Key:\\n\\n" + key);
+
+}
+
+</script>
+
+</body>
+</html>
+"""
+
+# ==========================================
+# ADMIN LOGIN TEMPLATE
+# ==========================================
+ADMIN_LOGIN_TEMPLATE = """
+<!DOCTYPE html>
+<html>
+<head>
+
+<title>Admin Login</title>
+
+<style>
+
+body{
+    background:#111;
+    color:white;
+    font-family:sans-serif;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    height:100vh;
+}
+
+.box{
+    background:#1e1e1e;
+    padding:30px;
+    border-radius:10px;
+    width:300px;
+}
+
+input{
+    width:100%;
+    padding:12px;
+    margin-top:10px;
+    margin-bottom:15px;
+    border:none;
+    border-radius:5px;
+}
+
+button{
+    width:100%;
+    padding:12px;
+    background:#4caf50;
+    border:none;
+    color:white;
+    border-radius:5px;
+    cursor:pointer;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="box">
+
+<h2>Admin Login</h2>
+
+<form method="POST">
+
+<input type="password" name="password" placeholder="Enter Admin Password">
+
+<button type="submit">
+Login
+</button>
+
+</form>
+
+</div>
+
+</body>
+</html>
+"""
+
+# ==========================================
+# ADMIN PANEL TEMPLATE
+# ==========================================
+ADMIN_PANEL_TEMPLATE = """
+<!DOCTYPE html>
+<html>
+<head>
+
+<title>Admin Panel</title>
+
+<style>
+
+body{
+    background:#0f0f0f;
+    color:white;
+    font-family:sans-serif;
+    padding:20px;
+}
+
+table{
+    width:100%;
+    border-collapse:collapse;
+    margin-top:20px;
+}
+
+th, td{
+    border:1px solid #333;
+    padding:12px;
+    text-align:center;
+}
+
+th{
+    background:#1f1f1f;
+}
+
+tr:nth-child(even){
+    background:#181818;
+}
+
+.delete-btn{
+    background:red;
+    color:white;
+    padding:8px 12px;
+    text-decoration:none;
+    border-radius:5px;
+}
+
+.logout-btn{
+    background:#444;
+    color:white;
+    padding:10px 15px;
+    text-decoration:none;
+    border-radius:5px;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<h1>Generated Keys</h1>
+
+<a href="/admin/logout" class="logout-btn">
+Logout
+</a>
+
+<div style="margin-bottom:20px; margin-top:20px;">
+
+<a href="/admin/free/lock"
+style="
+background:red;
+padding:10px 15px;
+color:white;
+text-decoration:none;
+border-radius:5px;
+margin-right:10px;
+">
+LOCK FREE KEY
+</a>
+
+<a href="/admin/free/unlock"
+style="
+background:green;
+padding:10px 15px;
+color:white;
+text-decoration:none;
+border-radius:5px;
+">
+UNLOCK FREE KEY
+</a>
+
+</div>
+
+<table>
+
+<tr>
+<th>License Key</th>
+<th>HWID</th>
+<th>Expiry</th>
+<th>Game</th>
+<th>Action</th>
 </tr>
 
 {% for key in keys %}
