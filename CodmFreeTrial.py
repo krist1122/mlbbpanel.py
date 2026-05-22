@@ -553,21 +553,24 @@ def free_landing():
 
 @app.route('/free/process', methods=['POST'])
 def free_process_route():
+
     token = str(uuid.uuid4())
+
+    session["free_token"] = token
 
     conn = get_db_connection()
     cursor = conn.cursor()
+
     cursor.execute(
-        "INSERT INTO free_tokens (token, used, created_at) VALUES (%s, %s, %s)",
+        "INSERT INTO free_tokens (token, used, created_at) VALUES (%s,%s,%s)",
         (token, False, int(time.time()))
     )
+
     conn.commit()
     conn.close()
 
-    # DITO: Ipapasa natin ang token sa URL ng SafelinkU
-    return redirect(
-    f"https://sfl.gl/0hpxBx?url=https://mlbbpanel-py.onrender.com/free/return?token={token}"
-)
+    # DIRETSO SA SAFELINK
+    return redirect("https://sfl.gl/0hpxBx")
 
 
 
@@ -577,7 +580,7 @@ def free_process_route():
 @app.route('/free/return')
 def free_return():
 
-    token = request.args.get("token")
+    token = session.get("free_token")
 
     if not token:
         return '<script>alert("Missing Token");window.location="/free";</script>'
@@ -585,7 +588,11 @@ def free_return():
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT used FROM free_tokens WHERE token=%s", (token,))
+    cursor.execute(
+        "SELECT used FROM free_tokens WHERE token=%s",
+        (token,)
+    )
+
     result = cursor.fetchone()
 
     conn.close()
@@ -596,8 +603,7 @@ def free_return():
     if result[0]:
         return '<script>alert("Already Used");window.location="/free";</script>'
 
-    # DIRETSO GENERATE
-    return redirect(f"/free/generate/direct?token={token}")
+    return redirect("/free/generate/direct")
 
 
 # ==========================================
@@ -606,27 +612,41 @@ def free_return():
 @app.route('/free/generate/direct')
 def free_generate_direct():
 
-    token = request.args.get("token")
+    token = session.get("free_token")
+
+    if not token:
+        return '<script>alert("Session Expired");window.location="/free";</script>'
 
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT used FROM free_tokens WHERE token=%s", (token,))
+    cursor.execute(
+        "SELECT used FROM free_tokens WHERE token=%s",
+        (token,)
+    )
+
     result = cursor.fetchone()
 
     if not result:
+        conn.close()
         return '<script>alert("Invalid Token");window.location="/free";</script>'
 
     if result[0]:
-        return '<script>alert("Token Already Used");window.location="/free";</script>'
+        conn.close()
+        return '<script>alert("Already Used");window.location="/free";</script>'
 
-    # MARK USED (ANTI-BYPASS CORE)
-    cursor.execute("UPDATE free_tokens SET used=TRUE WHERE token=%s", (token,))
-    conn.commit()
+    # MARK USED
+    cursor.execute(
+        "UPDATE free_tokens SET used=TRUE WHERE token=%s",
+        (token,)
+    )
 
-    # generate key
     now = int(time.time())
-    new_key = "Slider_" + ''.join(random.choices(string.ascii_letters + string.digits, k=15))
+
+    new_key = "Slider_" + ''.join(
+        random.choices(string.ascii_letters + string.digits, k=15)
+    )
+
     expiry = now + (12 * 3600)
 
     cursor.execute(
@@ -637,7 +657,12 @@ def free_generate_direct():
     conn.commit()
     conn.close()
 
-    return render_template_string(FREE_GENERATED_TEMPLATE, key=new_key)
+    session.pop("free_token", None)
+
+    return render_template_string(
+        FREE_GENERATED_TEMPLATE,
+        key=new_key
+    )
 
 # ==========================================
 # VERIFY API
