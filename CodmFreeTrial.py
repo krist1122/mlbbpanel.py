@@ -565,7 +565,9 @@ def free_process_route():
     conn.close()
 
     # DITO: Ipapasa natin ang token sa URL ng SafelinkU
-    return redirect(f"https://sfl.gl/0hpxBx?token={token}")
+    return redirect(
+    f"https://sfl.gl/0hpxBx?url=https://mlbbpanel-py.onrender.com/free/return?token={token}"
+)
 
 
 
@@ -586,13 +588,16 @@ def free_return():
     cursor.execute("SELECT used FROM free_tokens WHERE token=%s", (token,))
     result = cursor.fetchone()
 
+    conn.close()
+
     if not result:
         return '<script>alert("Invalid Token");window.location="/free";</script>'
 
     if result[0]:
         return '<script>alert("Already Used");window.location="/free";</script>'
 
-    return redirect(f"/free/return?token={token}")
+    # DIRETSO GENERATE
+    return redirect(f"/free/generate/direct?token={token}")
 
 
 # ==========================================
