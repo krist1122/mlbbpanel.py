@@ -238,7 +238,7 @@ font-size:28px;
 font-weight:bold;
 margin-bottom:20px;
 ">
-FREE KEY TEMPORARILY LOCKED
+WALA PANG FREE KEY DITO KEY-NG INAMO
 </div>
 
 <div style="
