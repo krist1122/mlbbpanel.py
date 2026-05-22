@@ -203,6 +203,8 @@ style="color:#0088cc;text-decoration:none;font-weight:bold;"
 =======================================
 </div>
 
+{% if free_enabled %}
+
 <form action="/free/process" method="POST">
 
 <div class="trial-container">
@@ -222,6 +224,36 @@ Free trial link 1.
 </div>
 
 </form>
+
+{% else %}
+
+<div style="
+margin-top:35px;
+text-align:center;
+">
+
+<div style="
+color:red;
+font-size:28px;
+font-weight:bold;
+margin-bottom:20px;
+">
+FREE KEY TEMPORARILY LOCKED
+</div>
+
+<div style="
+font-size:18px;
+line-height:1.7;
+">
+Free trial is currently unavailable.<br><br>
+
+Please wait for free access to reopen<br>
+OR avail VIP access 🙂
+</div>
+
+</div>
+
+{% endif %}
 
 </body>
 </html>
@@ -594,6 +626,11 @@ Delete
 # ==========================================
 @app.route('/free')
 def free_landing():
+
+    return render_template_string(
+        FREE_LANDING_TEMPLATE,
+        free_enabled=FREE_KEY_ENABLED
+    )
 
     global FREE_KEY_ENABLED
 
