@@ -653,7 +653,7 @@ def free_process_route():
     conn.commit()
     conn.close()
 
-    return redirect("https://sfl.gl/0hpxBx")
+    return redirect("https://gplinks.co/FiTnB")
 
 
 
