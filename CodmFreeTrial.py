@@ -589,6 +589,9 @@ Delete
 # ==========================================
 # USER ROUTES
 # ==========================================
+# ==========================================
+# USER ROUTES
+# ==========================================
 @app.route('/free')
 def free_landing():
 
@@ -598,78 +601,33 @@ def free_landing():
 
         LOCKED_TEMPLATE = """
         <!DOCTYPE html>
-        <html lang="en">
+        <html>
         <head>
-
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-        <title>Free Key Locked</title>
-
-        <style>
-
-        body{
-            background:#ffffff;
-            color:#000000;
-            font-family:sans-serif;
-            padding:20px;
-            margin:0;
-            text-align:center;
-        }
-
-        .lock-box{
-            margin-top:80px;
-        }
-
-        .lock-title{
-            color:#ff0000;
-            font-size:28px;
-            font-weight:bold;
-            margin-bottom:20px;
-        }
-
-        .lock-message{
-            font-size:18px;
-            line-height:1.7;
-        }
-
-        .telegram-link{
-            display:inline-block;
-            margin-top:25px;
-            font-size:20px;
-            color:#0088cc;
-            text-decoration:none;
-            font-weight:bold;
-        }
-
-        </style>
-
+        <title>Free Locked</title>
         </head>
+        <body style="font-family:sans-serif;text-align:center;padding-top:80px;">
 
-        <body>
-
-        <div class="lock-box">
-
-        <div class="lock-title">
+        <h1 style="color:red;">
         FREE KEY TEMPORARILY LOCKED
-        </div>
+        </h1>
 
-        <div class="lock-message">
-        Free key is temporarily unavailable.<br><br>
+        <p style="font-size:18px;">
+        Free trial is currently unavailable.<br><br>
 
-        You can wait until free access opens again<br>
-        OR avail VIP key for instant access 🙂
-        </div>
+        Please wait for free access to reopen<br>
+        OR avail VIP access 🙂
+        </p>
 
-        <a
-        href="http://t.me/phia_maganda"
+        <a href="http://t.me/phia_maganda"
         target="_blank"
-        class="telegram-link"
-        >
+        style="
+        font-size:20px;
+        color:#0088cc;
+        text-decoration:none;
+        font-weight:bold;
+        ">
         DM @phia_maganda
         </a>
-
-        </div>
 
         </body>
         </html>
@@ -677,10 +635,15 @@ def free_landing():
 
         return render_template_string(LOCKED_TEMPLATE)
 
-    return render_template_string(FREE_LANDING_TEMPLATE)    
+    return render_template_string(FREE_LANDING_TEMPLATE)
 
 @app.route('/free/process', methods=['POST'])
 def free_process_route():
+
+    global FREE_KEY_ENABLED
+
+    if not FREE_KEY_ENABLED:
+        return '<script>alert("Free Key Locked");window.location="/free";</script>'
 
     token = str(uuid.uuid4())
 
@@ -707,6 +670,11 @@ def free_process_route():
 # =========================
 @app.route('/free/return')
 def free_return():
+
+    global FREE_KEY_ENABLED
+
+    if not FREE_KEY_ENABLED:
+        return '<script>alert("Free Key Locked");window.location="/free";</script>'
 
     token = session.get("free_token")
 
@@ -742,6 +710,11 @@ def free_return():
 # ==========================================
 @app.route('/free/generate/direct')
 def free_generate_direct():
+
+    global FREE_KEY_ENABLED
+
+    if not FREE_KEY_ENABLED:
+        return '<script>alert("Free Key Locked");window.location="/free";</script>'
 
     # ANTI BYPASS
     if not session.get("passed_safelink"):
