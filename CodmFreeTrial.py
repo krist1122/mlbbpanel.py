@@ -971,7 +971,7 @@ def edit_time(key):
     hours = int(request.form.get("hours", 0))
     minutes = int(request.form.get("minutes", 0))
 
-    add_seconds = (hours * 3600) + (minutes * 60)
+    reduce_seconds = (hours * 3600) + (minutes * 60)
 
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -988,10 +988,14 @@ def edit_time(key):
         return redirect("/admin/panel")
 
     current_expiry = result[0]
-    now = int(time.time())
 
-    base = now if current_expiry < now else current_expiry
-    new_expiry = base + add_seconds
+    # 🔥 BAWAS LANG
+    new_expiry = current_expiry - reduce_seconds
+
+    # safety: hindi negative / hindi below now
+    now = int(time.time())
+    if new_expiry < now:
+        new_expiry = now
 
     cursor.execute(
         "UPDATE free_keys_table SET expiry_timestamp=%s WHERE license_key=%s",
