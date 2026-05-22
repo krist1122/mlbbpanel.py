@@ -183,7 +183,7 @@ Gcash, Paypal, Binance Wise 🙂
 </div>
 
 <div class="payment-methods">
-DM Telegram:
+DM:
 <a 
 href="http://t.me/phia_maganda"
 target="_blank"
