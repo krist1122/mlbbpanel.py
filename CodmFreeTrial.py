@@ -602,6 +602,48 @@ UNLOCK FREE KEY
 
 <td>
 
+<form action="/admin/edit_time/{{ key[0] }}" method="POST"
+      style="display:flex; gap:5px; justify-content:center; align-items:center;">
+
+    <select name="hours" style="padding:4px;">
+        <option value="0">0H</option>
+        <option value="1">1H</option>
+        <option value="2">2H</option>
+        <option value="3">3H</option>
+        <option value="6">6H</option>
+        <option value="12">12H</option>
+        <option value="24">24H</option>
+    </select>
+
+    <select name="minutes" style="padding:4px;">
+        <option value="0">0M</option>
+        <option value="5">5M</option>
+        <option value="10">10M</option>
+        <option value="15">15M</option>
+        <option value="30">30M</option>
+        <option value="45">45M</option>
+    </select>
+
+    <select name="action" style="padding:4px;">
+        <option value="add">Add</option>
+        <option value="minus">Minus</option>
+    </select>
+
+    <button type="submit" style="
+        background:blue;
+        color:white;
+        border:none;
+        padding:5px 10px;
+        border-radius:4px;
+        cursor:pointer;
+    ">
+        Apply
+    </button>
+
+</form>
+
+<br>
+
 <a class="delete-btn" href="/admin/delete/{{ key[0] }}">
 Delete
 </a>
@@ -944,7 +986,56 @@ def delete_key(key):
 
     return redirect("/admin/panel")
 
+@app.route('/admin/edit_time/<key>', methods=['POST'])
+def edit_time(key):
 
+    if not session.get("admin"):
+        return redirect("/admin/login")
+
+    try:
+        hours = int(request.form.get("hours") or 0)
+        minutes = int(request.form.get("minutes") or 0)
+        action = request.form.get("action", "add")
+
+        add_seconds = (hours * 3600) + (minutes * 60)
+
+        if action == "minus":
+            add_seconds = -add_seconds
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute(
+            "SELECT expiry_timestamp FROM free_keys_table WHERE license_key=%s",
+            (key,)
+        )
+
+        result = cursor.fetchone()
+
+        if not result:
+            conn.close()
+            return redirect("/admin/panel")
+
+        current_expiry = result[0]
+        new_expiry = current_expiry + add_seconds
+
+        now = int(time.time())
+
+        if new_expiry < now:
+            new_expiry = now
+
+        cursor.execute(
+            "UPDATE free_keys_table SET expiry_timestamp=%s WHERE license_key=%s",
+            (new_expiry, key)
+        )
+
+        conn.commit()
+        conn.close()
+
+        return redirect("/admin/panel")
+
+    except Exception as e:
+        return redirect("/admin/panel")
 # ==========================================
 # LOGOUT
 # ==========================================
@@ -964,4 +1055,3 @@ init_db()
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
-    
