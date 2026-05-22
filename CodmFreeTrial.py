@@ -602,9 +602,17 @@ UNLOCK FREE KEY
 <td>{{ key[3] }}</td>
 
 <td>
-    <form action="/admin/edit_time/{{ key[0] }}" method="POST" style="display:flex; gap:5px; justify-content:center;">
+    <form action="/admin/edit_time/{{ key[0] }}" method="POST"
+        style="display:flex; gap:5px; justify-content:center; align-items:center;">
+
         <input type="number" name="hours" placeholder="H" style="width:50px;">
         <input type="number" name="minutes" placeholder="M" style="width:50px;">
+
+        <select name="action" style="padding:4px;">
+            <option value="add">Add</option>
+            <option value="minus">Minus</option>
+        </select>
+
         <button type="submit" style="
             background:blue;
             color:white;
@@ -612,17 +620,16 @@ UNLOCK FREE KEY
             padding:5px 10px;
             border-radius:4px;
         ">
-            Edit
+            Apply
         </button>
+
     </form>
 </td>
 
 <td>
-
-<a class="delete-btn" href="/admin/delete/{{ key[0] }}">
-Delete
-</a>
-
+    <a class="delete-btn" href="/admin/delete/{{ key[0] }}">
+        Delete
+    </a>
 </td>
 
 </tr>
@@ -633,7 +640,6 @@ Delete
 
 </body>
 </html>
-"""
 
 # ==========================================
 # USER ROUTES
@@ -968,38 +974,50 @@ def edit_time(key):
     if not session.get("admin"):
         return redirect("/admin/login")
 
-    minutes = int(request.form.get("minutes", 0))
+    try:
+        hours = int(request.form.get("hours") or 0)
+        minutes = int(request.form.get("minutes") or 0)
+        action = request.form.get("action", "add")
 
-    add_seconds = minutes * 60  # MINUTES ONLY
+        add_seconds = (hours * 3600) + (minutes * 60)
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
+        if action == "minus":
+            add_seconds = -add_seconds
 
-    cursor.execute(
-        "SELECT expiry_timestamp FROM free_keys_table WHERE license_key=%s",
-        (key,)
-    )
+        conn = get_db_connection()
+        cursor = conn.cursor()
 
-    result = cursor.fetchone()
+        cursor.execute(
+            "SELECT expiry_timestamp FROM free_keys_table WHERE license_key=%s",
+            (key,)
+        )
 
-    if not result:
+        result = cursor.fetchone()
+
+        if not result:
+            conn.close()
+            return redirect("/admin/panel")
+
+        current_expiry = result[0]
+
+        new_expiry = current_expiry + add_seconds
+
+        now = int(time.time())
+        if new_expiry < now:
+            new_expiry = now
+
+        cursor.execute(
+            "UPDATE free_keys_table SET expiry_timestamp=%s WHERE license_key=%s",
+            (new_expiry, key)
+        )
+
+        conn.commit()
         conn.close()
+
         return redirect("/admin/panel")
 
-    now = int(time.time())
-
-    # IMPORTANT: SET EXACT TIME FROM NOW (NOT add on old)
-    new_expiry = now + add_seconds
-
-    cursor.execute(
-        "UPDATE free_keys_table SET expiry_timestamp=%s WHERE license_key=%s",
-        (new_expiry, key)
-    )
-
-    conn.commit()
-    conn.close()
-
-    return redirect("/admin/panel")
+    except:
+        return redirect("/admin/panel")
 
 
 # ==========================================
