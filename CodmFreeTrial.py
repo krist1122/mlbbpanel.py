@@ -180,7 +180,6 @@ Official pricelist || Codm Free Key Only!
 <div class="price-item">₱300 || $5.15 → 7 Days</div>
 <div class="price-item">₱500 || $8.58 → 15 Days</div>
 <div class="price-item">₱730 || $12.87 → 30 Days</div>
-<div class="price-item">₱2,000 || $35+ → Permanent ~</div>
 
 <div class="payment-methods">
 Gcash, Paypal, Binance Wise 🙂
