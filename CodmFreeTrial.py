@@ -173,16 +173,20 @@ Purchase VIP, No ads, More features
 <div class="info-text">
 
 <div class="pricelist-title">
-Official pricelist || Codm Free Key Only!
+𝘒𝘌𝘠 𝘓𝘖𝘎𝘐𝘕 𝘗𝘙𝘐𝘊𝘌 : ? ? ?
 </div>
 
-<div class="price-item">₱150 || $2.57 → 3 Days</div>
-<div class="price-item">₱300 || $5.15 → 7 Days</div>
-<div class="price-item">₱500 || $8.58 → 15 Days</div>
-<div class="price-item">₱730 || $12.87 → 30 Days</div>
+<div class="price-line">-------------------------------------</div>
+
+<div class="price-item">₱150  |  $2.57  •  3 Days</div>
+<div class="price-item">₱300  |  $5.15  •  7 Days</div>
+<div class="price-item">₱500  |  $8.58  •  15 Days</div>
+<div class="price-item">₱730  |  $12.87 •  30 Days</div>
+<div class="price-item">₱2,000 | Permanent Access ∞</div>
 
 <div class="payment-methods">
-Gcash, Paypal, Binance Wise 🙂
+Payment Methods:<br>
+GCash • PayPal • Binance • Wise
 </div>
 
 <div class="payment-methods">
